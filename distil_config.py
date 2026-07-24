@@ -504,6 +504,13 @@ class DistilConfig(TrainingArguments):
                    "If False (default), use the student model for generation (standard RL behavior)."
         },
     )
+    enable_thinking: bool = field(
+        default=True,
+        metadata={
+            "help": "Whether to enable thinking mode in chat template. When False, an empty <think> block is injected "
+                   "to suppress model reasoning (e.g. for Qwen3). Defaults to True."
+        },
+    )
     num_iterations: int = field(
         default=1,
         metadata={"help": "Number of iterations per batch (denoted as μ in the algorithm)."},

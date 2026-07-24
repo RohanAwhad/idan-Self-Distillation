@@ -1,3 +1,27 @@
+# How to Run
+
+```bash
+CUDA_VISIBLE_DEVICES=0,1,2,3 \
+WANDB_PROJECT=amortize-maas \
+WANDB_ENTITY=ronny21 \
+WANDB_NAME=sdft_idan_test_run \
+uv run python main.py \
+  --learning_rate 5e-6 \
+  --dataset_name tooluse \
+  --output_dir /mnt/nvme7n1/rawhad/amortize_maas_rag/sdft_idan_test_run/ \
+  --num_train_epochs 2 \
+  --model_name Qwen/Qwen3-8B
+```
+
+
+
+
+
+
+
+
+---
+
 # Self-Distillation Fine-Tuning
 
 This is TRL-based code for reproducing the On-Policy Self-Distillation algorithm from the paper "Self-Distillation Enables Continual Learning" - [https://arxiv.org/abs/2601.19897](https://arxiv.org/abs/2601.19897).

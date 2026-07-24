@@ -346,6 +346,7 @@ class DistilTrainer(BaseTrainer):
         self.mask_truncated_completions = args.mask_truncated_completions
         self.top_entropy_quantile = args.top_entropy_quantile
         self.num_loss_tokens_to_skip = args.num_loss_tokens_to_skip
+        self.enable_thinking = args.enable_thinking
 
         # Datasets
         self.shuffle_dataset = args.shuffle_dataset
@@ -1051,7 +1052,7 @@ class DistilTrainer(BaseTrainer):
                     prepare_multimodal_messages(prompt, num_images=len(image_list))
 
         prompts_text = [
-            maybe_apply_chat_template({"prompt": prompt}, self.processing_class)["prompt"] for prompt in prompts
+            maybe_apply_chat_template({"prompt": prompt}, self.processing_class, enable_thinking=self.enable_thinking)["prompt"] for prompt in prompts
         ]
 
         if images is not None:
@@ -1344,10 +1345,17 @@ class DistilTrainer(BaseTrainer):
             forward_kwargs,
         ) = self._generate(generation_prompts, images)
 
+        # DEBUG: log first completion to verify thinking mode
+        if self.accelerator.is_main_process:
+            _dbg_text = self.processing_class.decode(completion_ids_list[0], skip_special_tokens=False)
+            logger.info(f"[DEBUG thinking check] First completion:\n{_dbg_text[:500]}")
+
         # Process student prompts (always used for student training, regardless of generation source)
         prompts_text = [
-            maybe_apply_chat_template({"prompt": prompt}, self.processing_class)["prompt"] for prompt in prompts
+            maybe_apply_chat_template({"prompt": prompt}, self.processing_class, enable_thinking=self.enable_thinking)["prompt"] for prompt in prompts
         ]
+        if self.accelerator.is_main_process:
+            logger.info(f"[DEBUG thinking check] Student prompt tail: ...{prompts_text[0][-100:]}")
         if self.use_vllm:
             self.processing_class.truncation_side = "left"
         student_inputs = self.processing_class(
@@ -1365,8 +1373,10 @@ class DistilTrainer(BaseTrainer):
 
         # Process teacher prompts (always used for teacher, regardless of generation source)
         teacher_prompts_text = [
-            maybe_apply_chat_template({"prompt": prompt}, self.processing_class)["prompt"] for prompt in teacher_prompts
+            maybe_apply_chat_template({"prompt": prompt}, self.processing_class, enable_thinking=self.enable_thinking)["prompt"] for prompt in teacher_prompts
         ]
+        if self.accelerator.is_main_process:
+            logger.info(f"[DEBUG thinking check] Teacher prompt tail: ...{teacher_prompts_text[0][-100:]}")
         teacher_inputs = self.processing_class(
             text=teacher_prompts_text,
             return_tensors="pt",
@@ -1412,6 +1422,15 @@ class DistilTrainer(BaseTrainer):
         attention_mask = torch.cat([prompt_mask, completion_mask], dim=1)  # (B, P+C)
         teacher_prompt_completion_ids = torch.cat([teacher_prompt_ids, completion_ids], dim=1)  # (B, P+C)
         teacher_attention_mask = torch.cat([teacher_prompt_mask, completion_mask], dim=1)  # (B, P+C)
+
+        # DEBUG: log the prompt+completion junction for first sample
+        if self.accelerator.is_main_process:
+            _sp = self.processing_class.decode(prompt_ids[0][prompt_mask[0].bool()], skip_special_tokens=False)
+            _tp = self.processing_class.decode(teacher_prompt_ids[0][teacher_prompt_mask[0].bool()], skip_special_tokens=False)
+            _c = self.processing_class.decode(completion_ids[0][completion_mask[0].bool()], skip_special_tokens=False)
+            logger.info(f"[DEBUG concat] Student prompt tail + completion head: ...{_sp[-100:]}|||{_c[:100]}...")
+            logger.info(f"[DEBUG concat] Teacher prompt tail + completion head: ...{_tp[-100:]}|||{_c[:100]}...")
+
         # If token_type_ids are used, extend them with zeros for the completion part
         if "token_type_ids" in forward_kwargs:
             token_type_ids = forward_kwargs["token_type_ids"]

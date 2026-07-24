@@ -18,6 +18,7 @@ def parse_args():
     parser.add_argument("--model_name", type=str, default="Qwen/Qwen3-8B", help="Model name")
     parser.add_argument("--dataset_name", type=str, default="tooluse", help="Dataset name", choices=["tooluse", "science"])
     parser.add_argument("--seed", type=int, default=42, help="Seed")
+    parser.add_argument("--enable_thinking", action="store_true", default=False, help="Enable thinking mode in chat template (e.g. for Qwen3)")
     return parser.parse_args()
 
 def load_tooluse_dataset(seed=42) -> Dataset:
@@ -134,6 +135,7 @@ if __name__ == "__main__":
         ref_model_mixup_alpha = args.ref_model_mixup_alpha,
         vllm_importance_sampling_correction = True,
         num_loss_tokens_to_skip = 3,
+        enable_thinking = args.enable_thinking,
     )
     trainer = DistilTrainer(
         model=model,
