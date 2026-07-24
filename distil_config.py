@@ -263,7 +263,7 @@ class DistilConfig(TrainingArguments):
         },
     )
     bf16: Optional[bool] = field(
-        default=None,
+        default=True,
         metadata={
             "help": "Whether to use bf16 (mixed) precision instead of 32-bit. Requires Ampere or higher NVIDIA "
             "architecture or Intel XPU or using CPU (use_cpu) or Ascend NPU. If not set, it defaults to `True` if "
@@ -298,20 +298,26 @@ class DistilConfig(TrainingArguments):
         },
     )
     max_prompt_length: Optional[int] = field(
-        default=512,
+        default=4096,
         metadata={
             "help": "Maximum length of the prompt. If the prompt is longer than this value, it will be truncated left."
         },
     )
     num_generations: Optional[int] = field(
-        default=8,
+        default=1,
         metadata={
             "help": "Number of generations to sample. The effective batch size (num_processes * per_device_batch_size "
             "* gradient_accumulation_steps) must be evenly divisible by this value."
         },
     )
+    max_teacher_prompt_length: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "Maximum length of the teacher prompt. If None, defaults to max_prompt_length."
+        },
+    )
     max_completion_length: Optional[int] = field(
-        default=256,
+        default=2048,
         metadata={"help": "Maximum length of the generated completion."},
     )
     ds3_gather_for_generation: bool = field(
@@ -484,7 +490,7 @@ class DistilConfig(TrainingArguments):
         },
     )
     alpha: float = field(
-        default=0.0,
+        default=1.0,
         metadata={
             "help": "Alpha coefficient. If `0.0` (default), the forward KL is used. If `1.0`, the reverse KL is used. If anything in between, the Jensen-Shannon Divergence is used."
         },

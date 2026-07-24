@@ -15,7 +15,7 @@ def parse_args():
     parser.add_argument("--num_prompts_per_batch", type=int, default=32, help="Number of prompts per batch")
     parser.add_argument("--ref_model_mixup_alpha", type=float, default=0.01, help="Reference model mixup alpha")
     parser.add_argument("--output_dir", type=str, help="Output directory")
-    parser.add_argument("--model_name", type=str, default="Qwen/Qwen2.5-7B-Instruct", help="Model name")
+    parser.add_argument("--model_name", type=str, default="Qwen/Qwen3-8B", help="Model name")
     parser.add_argument("--dataset_name", type=str, default="tooluse", help="Dataset name", choices=["tooluse", "science"])
     parser.add_argument("--seed", type=int, default=42, help="Seed")
     return parser.parse_args()
@@ -81,13 +81,19 @@ Now answer with a response of your own, including the thinking process.
 
 if __name__ == "__main__":
     args = parse_args()
+    student_gpu_memory = {0: "0GiB", 1: "0GiB", 2: "80GiB", 3: "80GiB"}
     model = AutoModelForCausalLM.from_pretrained(
         args.model_name,
         torch_dtype=torch.bfloat16,
+        device_map="auto",
+        max_memory=student_gpu_memory,
     )
+    teacher_gpu_memory = {0: "0GiB", 1: "80GiB", 2: "0GiB", 3: "0GiB"}
     teacher_model = AutoModelForCausalLM.from_pretrained(
         args.model_name,
         torch_dtype=torch.bfloat16,
+        device_map="auto",
+        max_memory=teacher_gpu_memory,
     )
     tokenizer = AutoTokenizer.from_pretrained(args.model_name)
     if args.dataset_name == "tooluse":
@@ -102,8 +108,8 @@ if __name__ == "__main__":
         use_vllm = True,
         vllm_mode="colocate",
         vllm_tensor_parallel_size=1, 
-        vllm_gpu_memory_utilization=0.3,
-        vllm_enable_sleep_mode=True, 
+        vllm_gpu_memory_utilization=0.5,
+        vllm_enable_sleep_mode=False, 
         learning_rate = args.learning_rate,
         warmup_ratio = 0.1,
         lr_scheduler_type = "cosine",
@@ -112,8 +118,9 @@ if __name__ == "__main__":
         fp16 = False,
         per_device_train_batch_size = 1,
         gradient_accumulation_steps = args.num_prompts_per_batch,
-        max_prompt_length = 1024,
-        max_completion_length = 1024,
+        max_prompt_length = 2048,
+        max_teacher_prompt_length = 8192,
+        max_completion_length = 2048,
         num_train_epochs = args.num_train_epochs,
         num_iterations = 1,
         num_generations = 1,

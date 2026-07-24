@@ -109,7 +109,7 @@ class MemoryEfficientSyncRefModelCallback(TrainerCallback):
     @staticmethod
     def _sync_param(model_param, ref_param, alpha):
         """Sync a single parameter: ref = alpha * model + (1 - alpha) * ref"""
-        ref_param.data.mul_(1.0 - alpha).add_(model_param.data, alpha=alpha)
+        ref_param.data.mul_(1.0 - alpha).add_(model_param.data.to(ref_param.device), alpha=alpha)
 
     @staticmethod
     def sync_target_model_memory_efficient(model, target_model, alpha):
@@ -325,6 +325,7 @@ class DistilTrainer(BaseTrainer):
 
         # Training arguments
         self.max_prompt_length = args.max_prompt_length
+        self.max_teacher_prompt_length = args.max_teacher_prompt_length or args.max_prompt_length
         self.max_completion_length = args.max_completion_length
         self.num_generations = args.num_generations
         self.temperature = args.temperature
@@ -938,7 +939,7 @@ class DistilTrainer(BaseTrainer):
                             self.vllm_client.update_named_param(name, param.data)
                         elif self.vllm_mode == "colocate":
                             llm_model = self.llm.llm_engine.model_executor.driver_worker.model_runner.model
-                            llm_model.load_weights([(name, param.data)])
+                            llm_model.load_weights([(name, param.data.to(self.accelerator.device))])
 
         # Reset cache on vLLM
         if self.vllm_mode == "server" and self.accelerator.is_main_process:
@@ -1371,7 +1372,7 @@ class DistilTrainer(BaseTrainer):
             return_tensors="pt",
             padding=True,
             padding_side="left",
-            max_length=self.max_prompt_length,
+            max_length=self.max_teacher_prompt_length,
             truncation=True,
             add_special_tokens=False,
         )
