@@ -13,6 +13,7 @@ def parse_args():
     parser.add_argument("--learning_rate", type=float, default=2e-5, help="Learning rate")
     parser.add_argument("--num_train_epochs", type=int, default=1, help="Number of training epochs")
     parser.add_argument("--num_prompts_per_batch", type=int, default=32, help="Number of prompts per batch")
+    parser.add_argument("--per_device_train_batch_size", type=int, default=1, help="Train batch size per device")
     parser.add_argument("--ref_model_mixup_alpha", type=float, default=0.01, help="Reference model mixup alpha")
     parser.add_argument("--output_dir", type=str, help="Output directory")
     parser.add_argument("--model_name", type=str, default="Qwen/Qwen3-8B", help="Model name")
@@ -117,7 +118,7 @@ if __name__ == "__main__":
         logging_steps = 1,
         bf16 = True,
         fp16 = False,
-        per_device_train_batch_size = 1,
+        per_device_train_batch_size = args.per_device_train_batch_size,
         gradient_accumulation_steps = args.num_prompts_per_batch,
         max_prompt_length = 2048,
         max_teacher_prompt_length = 8192,
