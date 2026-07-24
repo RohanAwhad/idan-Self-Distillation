@@ -554,7 +554,7 @@ class DistilTrainer(BaseTrainer):
             elif self.is_fsdp_enabled:
                 self.ref_model = prepare_fsdp(self.ref_model, self.accelerator)
             else:
-                self.ref_model = self.accelerator.prepare_model(self.ref_model, evaluation_mode=True)
+                self.ref_model = self.accelerator.prepare_model(self.ref_model, evaluation_mode=True, device_placement=False)
 
         if args.sync_ref_model:
             self.add_callback(MemoryEfficientSyncRefModelCallback(ref_model=self.ref_model, accelerator=self.accelerator))
@@ -756,9 +756,12 @@ class DistilTrainer(BaseTrainer):
         all_selected_logps = []
         all_logps = []
         all_entropies = []
+        # Move inputs to the model's device (e.g. ref_model may be on a different GPU)
+        model_device = next(model.parameters()).device
+        input_device = input_ids.device
         for start in range(0, input_ids.size(0), batch_size):
-            input_ids_batch = input_ids[start : start + batch_size]
-            attention_mask_batch = attention_mask[start : start + batch_size]
+            input_ids_batch = input_ids[start : start + batch_size].to(model_device)
+            attention_mask_batch = attention_mask[start : start + batch_size].to(model_device)
 
             # Build model inputs - check if the model supports logits_to_keep (some models and VLMs don't)
             model_inputs = {"input_ids": input_ids_batch, "attention_mask": attention_mask_batch}
@@ -811,12 +814,12 @@ class DistilTrainer(BaseTrainer):
                     entropies = entropy_from_logits(logits)
                 all_entropies.append(entropies)
 
-        selected_logps = torch.cat(all_selected_logps, dim=0)
+        selected_logps = torch.cat(all_selected_logps, dim=0).to(input_device)
         if compute_all_logps:
-            logps = torch.cat(all_logps, dim=0)
+            logps = torch.cat(all_logps, dim=0).to(input_device)
         else:
             logps = None
-        entropies = torch.cat(all_entropies, dim=0) if compute_entropy else None
+        entropies = torch.cat(all_entropies, dim=0).to(input_device) if compute_entropy else None
         return selected_logps, logps, entropies
 
     def _fix_param_name_to_vllm(self, name, extra_prefixes: Optional[list[str]] = None):

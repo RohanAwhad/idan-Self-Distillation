@@ -19,6 +19,8 @@ def parse_args():
     parser.add_argument("--dataset_name", type=str, default="tooluse", help="Dataset name", choices=["tooluse", "science"])
     parser.add_argument("--seed", type=int, default=42, help="Seed")
     parser.add_argument("--enable_thinking", action="store_true", default=False, help="Enable thinking mode in chat template (e.g. for Qwen3)")
+    parser.add_argument("--report_to", type=str, default="wandb", help="Reporting integration (wandb, none)")
+    parser.add_argument("--save_strategy", type=str, default="steps", help="Save strategy (steps, no)")
     return parser.parse_args()
 
 def load_tooluse_dataset(seed=42) -> Dataset:
@@ -82,19 +84,17 @@ Now answer with a response of your own, including the thinking process.
 
 if __name__ == "__main__":
     args = parse_args()
-    student_gpu_memory = {0: "0GiB", 1: "0GiB", 2: "80GiB", 3: "80GiB"}
     model = AutoModelForCausalLM.from_pretrained(
         args.model_name,
         torch_dtype=torch.bfloat16,
         device_map="auto",
-        max_memory=student_gpu_memory,
+        max_memory={0: "0GiB", 1: "0GiB", 2: "80GiB", 3: "80GiB"},
     )
-    teacher_gpu_memory = {0: "0GiB", 1: "80GiB", 2: "0GiB", 3: "0GiB"}
     teacher_model = AutoModelForCausalLM.from_pretrained(
         args.model_name,
         torch_dtype=torch.bfloat16,
-        device_map="auto",
-        max_memory=teacher_gpu_memory,
+        device_map={"": 1},
+        max_memory={0: "0GiB", 1: "80GiB", 2: "0GiB", 3: "0GiB"},
     )
     tokenizer = AutoTokenizer.from_pretrained(args.model_name)
     if args.dataset_name == "tooluse":
@@ -126,8 +126,9 @@ if __name__ == "__main__":
         num_iterations = 1,
         num_generations = 1,
         save_steps = 100,
+        save_strategy = args.save_strategy,
         max_grad_norm = 1,
-        report_to = "wandb",
+        report_to = args.report_to,
         output_dir = args.output_dir,
         log_completions = False, # True for debugging
         sync_ref_model = True,
