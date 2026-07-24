@@ -555,6 +555,7 @@ class DistilTrainer(BaseTrainer):
                 self.ref_model = prepare_fsdp(self.ref_model, self.accelerator)
             else:
                 self.ref_model = self.accelerator.prepare_model(self.ref_model, evaluation_mode=True, device_placement=False)
+                self.ref_model = torch.compile(self.ref_model, dynamic=True)
 
         if args.sync_ref_model:
             self.add_callback(MemoryEfficientSyncRefModelCallback(ref_model=self.ref_model, accelerator=self.accelerator))
