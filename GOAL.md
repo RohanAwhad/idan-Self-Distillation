@@ -181,8 +181,8 @@ To expose a new parameter, add it as a CLI arg in `main.py:parse_args()` and wir
 2. **Bump RUN_NAME** to next number (e.g., `sdft_idan_hpo_1` -> `sdft_idan_hpo_2`)
 3. **Commit** the change: `git add hpo_run.sh && git commit -m "hpo: sdft_idan_hpo_N with <description of changes>"`
 4. **Run** in tmux hpo window: `bash hpo_run.sh`
-5. **Wait** ~2.5-3 hours (2h training + eval time)
-6. **Result appears** in tmux `idans_sdft:0.0` and in `/tmp/sdft_hpo_results.log`
+5. **Do NOT poll or wait** — the script has an EXIT trap that sends results via `tmux send-keys` to `idans_sdft:0.0` when it finishes (success or failure). The result will arrive in your pane automatically.
+6. **Result appears** as a `# HPO ...` comment in your tmux pane, and is appended to `/tmp/sdft_hpo_results.log`
 7. **Analyze** the result, check wandb for loss curves
 8. **Decide next hyperparameters** based on results
 9. **Repeat** from step 1
