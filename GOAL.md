@@ -195,6 +195,15 @@ To use these, add CLI arg in `main.py:parse_args()`, wire into `DistilConfig(...
 - Entity: `ronny21`
 - Each run is named by `RUN_NAME` (e.g., `sdft_idan_hpo_1`)
 
+### Current Experiment Grid (2x2 design)
+
+| | reverse KL (alpha=1.0) | forward KL (alpha=0.0) |
+|---|---|---|
+| **student gen** (default) | HPO 1 (tmux:4, GPUs 4-7) | HPO 2 (tmux:3.0, GPUs 0-3) |
+| **teacher gen** (`--generate_from_teacher`) | HPO 3 (chained after HPO 1) | HPO 4 (chained after HPO 2) |
+
+**Key code insight**: `generate_from_teacher=True` uses `teacher_prompts` for generation (which include the golden response as an example) AND uses teacher model weights. The student still only sees the plain question during loss computation. This is **privileged information distillation**.
+
 ---
 
 ## Key Findings & Intuitions
