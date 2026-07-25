@@ -825,7 +825,7 @@ class DistilTrainer(BaseTrainer):
 
     def _fix_param_name_to_vllm(self, name, extra_prefixes: Optional[list[str]] = None):
         extra_prefixes = extra_prefixes or []
-        prefixes = ["_checkpoint_wrapped_module."] + extra_prefixes
+        prefixes = ["_checkpoint_wrapped_module.", "_orig_mod."] + extra_prefixes
         for prefix in prefixes:
             name = name.replace(prefix, "")
         return name

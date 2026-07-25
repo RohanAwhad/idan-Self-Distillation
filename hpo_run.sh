@@ -82,33 +82,35 @@ cd "${TRAIN_DIR}"
 
 # Run training with timeout
 SCRIPT_STATUS="TRAINING"
-timeout ${TIMEOUT} \
-  env CUDA_VISIBLE_DEVICES=${TRAIN_GPUS} \
-      WANDB_PROJECT="amortize-maas" \
-      WANDB_ENTITY="ronny21" \
-      WANDB_NAME="${RUN_NAME}" \
-  uv run python main.py \
-    --learning_rate ${LEARNING_RATE} \
-    --dataset_name ${DATASET} \
-    --output_dir "${OUTPUT_DIR}" \
-    --num_train_epochs ${NUM_EPOCHS} \
-    --model_name ${MODEL_NAME} \
-    --num_prompts_per_batch ${NUM_PROMPTS_PER_BATCH} \
-    --per_device_train_batch_size ${PER_DEVICE_BATCH_SIZE} \
-    --ref_model_mixup_alpha ${REF_MODEL_MIXUP_ALPHA} \
-    --save_strategy steps \
-    --save_steps ${SAVE_STEPS} \
-    --report_to wandb \
-    --seed ${SEED} \
-    --alpha ${ALPHA} \
-    --temperature ${TEMPERATURE} \
-    --warmup_ratio ${WARMUP_RATIO} \
-    --lr_scheduler_type ${LR_SCHEDULER} \
-    --max_grad_norm ${MAX_GRAD_NORM} \
-    --loss_type ${LOSS_TYPE} \
-    ${ENABLE_THINKING} \
-    ${GENERATE_FROM_TEACHER} \
-  2>&1 | tee "${TRAIN_LOG}" || true
+# Run training in subshell to isolate timeout signals from parent script
+(
+  timeout ${TIMEOUT} \
+    env CUDA_VISIBLE_DEVICES=${TRAIN_GPUS} \
+        WANDB_PROJECT="amortize-maas" \
+        WANDB_ENTITY="ronny21" \
+        WANDB_NAME="${RUN_NAME}" \
+    uv run python main.py \
+      --learning_rate ${LEARNING_RATE} \
+      --dataset_name ${DATASET} \
+      --output_dir "${OUTPUT_DIR}" \
+      --num_train_epochs ${NUM_EPOCHS} \
+      --model_name ${MODEL_NAME} \
+      --num_prompts_per_batch ${NUM_PROMPTS_PER_BATCH} \
+      --per_device_train_batch_size ${PER_DEVICE_BATCH_SIZE} \
+      --ref_model_mixup_alpha ${REF_MODEL_MIXUP_ALPHA} \
+      --save_strategy steps \
+      --save_steps ${SAVE_STEPS} \
+      --report_to wandb \
+      --seed ${SEED} \
+      --alpha ${ALPHA} \
+      --temperature ${TEMPERATURE} \
+      --warmup_ratio ${WARMUP_RATIO} \
+      --lr_scheduler_type ${LR_SCHEDULER} \
+      --max_grad_norm ${MAX_GRAD_NORM} \
+      --loss_type ${LOSS_TYPE} \
+      ${ENABLE_THINKING} \
+      ${GENERATE_FROM_TEACHER}
+) 2>&1 | tee "${TRAIN_LOG}" || true
 
 TRAIN_EXIT=${PIPESTATUS[0]:-$?}
 END_TIME=$(date +%s)
@@ -120,8 +122,8 @@ if [ "${TRAIN_EXIT}" -eq 124 ]; then
   echo "  (timed out after ${TIMEOUT}s)"
 fi
 
-# Count training steps from log
-TRAIN_STEPS=$(grep -c "'loss':" "${TRAIN_LOG}" 2>/dev/null || echo "0")
+# Count training steps from log (-a treats binary files as text due to progress bar chars)
+TRAIN_STEPS=$(grep -ac "'loss':" "${TRAIN_LOG}" 2>/dev/null || echo "0")
 echo "Training steps completed: ${TRAIN_STEPS}"
 
 # ============================================================
