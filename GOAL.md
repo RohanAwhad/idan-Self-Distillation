@@ -105,12 +105,14 @@ Location: `/home/rohan/1_Projects/idan_sdft/hpo_run.sh`
 ```
 1. Set hyperparameters (variables at top of script)
 2. Train with `timeout 7200` (2 hours hard cap)
-3. Find last checkpoint-* directory in output_dir
-4. Run inference on GPU 4 (just infer, training GPUs are freed by now)
-5. Run eval-claude
-6. Parse accuracy from 3 summary JSONs, compute mean +/- std
-7. Send result summary to tmux idans_sdft:0.0
-8. Append to /tmp/sdft_hpo_results.log
+3. Find ALL checkpoint-* directories in output_dir (sorted by step)
+4. For EACH checkpoint:
+   a. Run inference on GPU 4 (just infer)
+   b. Run eval-claude (Claude Sonnet judge, 3 runs)
+   c. Parse accuracy, track best
+5. Report: best checkpoint + per-checkpoint breakdown
+6. Send result summary to tmux idans_sdft:0.0
+7. Append to /tmp/sdft_hpo_results.log
 ```
 
 ### How to Run
@@ -140,9 +142,9 @@ Edit the hyperparameter block at the top of `hpo_run.sh`. Bump `RUN_NAME` to `sd
 
 These are the knobs you can turn between runs. Modify them in the `HYPERPARAMETERS` block at the top of `hpo_run.sh`.
 
-### Currently exposed in hpo_run.sh
+### Exposed in hpo_run.sh (all tunable)
 
-| Parameter | Current Default | Range/Options | Notes |
+| Parameter | Default | Range/Options | Notes |
 |---|---|---|---|
 | `LEARNING_RATE` | 5e-6 | 1e-6 to 2e-5 | Most impactful knob |
 | `NUM_EPOCHS` | 3 | 1 to 5 | But 2h timeout caps actual training |
@@ -150,28 +152,27 @@ These are the knobs you can turn between runs. Modify them in the `HYPERPARAMETE
 | `PER_DEVICE_BATCH_SIZE` | 2 | 1, 2, 4 | Effective batch = this * NUM_PROMPTS_PER_BATCH |
 | `REF_MODEL_MIXUP_ALPHA` | 0.01 | 0.001 to 0.1 | How fast ref model tracks student (TR-DPO) |
 | `SEED` | 42 | any int | For reproducibility |
+| `ALPHA` | 1.0 | 0.0=forward KL, 0.5=JSD, 1.0=reverse KL | KL direction |
+| `TEMPERATURE` | 1.0 | 0.7 to 1.5 | Generation sampling temperature |
+| `WARMUP_RATIO` | 0.1 | 0.0 to 0.2 | LR warmup fraction |
+| `LR_SCHEDULER` | cosine | cosine, linear, constant | LR schedule shape |
+| `MAX_GRAD_NORM` | 1.0 | 0.5 to 2.0 | Gradient clipping |
+| `LOSS_TYPE` | dapo | grpo, dapo, dr_grpo, bnpo | Loss normalization strategy |
+| `GENERATE_FROM_TEACHER` | off | "--generate_from_teacher" | Online SFT: teacher generates, student learns |
 
-### Available in main.py but not yet exposed in hpo_run.sh
+### Available in DistilConfig but not yet exposed
 
-To use these, add them as `--arg_name value` to the `uv run python main.py` command in `hpo_run.sh`. They are already supported by `main.py` / `DistilConfig`:
+To use these, add CLI arg in `main.py:parse_args()`, wire into `DistilConfig(...)`, then add variable to `hpo_run.sh`:
 
-| Parameter | Default in Config | Range/Options | Notes |
+| Parameter | Default | Range/Options | Notes |
 |---|---|---|---|
-| `alpha` | 1.0 | 0.0=forward KL, 0.5=JSD, 1.0=reverse KL | KL direction |
-| `temperature` | 1.0 | 0.7 to 1.5 | Generation sampling temperature |
-| `warmup_ratio` | 0.1 | 0.0 to 0.2 | LR warmup fraction |
-| `lr_scheduler_type` | cosine | cosine, linear, constant | LR schedule shape |
 | `epsilon` | 0.2 | 0.1 to 0.3 | Clipping parameter |
 | `num_loss_tokens_to_skip` | 3 | 0 to 10 | Skip initial completion tokens in loss |
-| `loss_type` | dapo | grpo, dapo, dr_grpo, bnpo | Loss normalization strategy |
 | `scale_rewards` | group | group, batch, none | Reward scaling strategy |
 | `top_entropy_quantile` | 1.0 | 0.2 to 1.0 | Entropy-based token masking (1.0=off) |
-| `max_grad_norm` | 1.0 | 0.5 to 2.0 | Gradient clipping |
 | `ref_model_sync_steps` | 1 | 1 to 64 | How often to sync ref model |
 | `max_completion_length` | 2048 | 1024 to 4096 | Max generated tokens |
 | `max_prompt_length` | 2048 | 1024 to 4096 | Max prompt tokens |
-
-To expose a new parameter, add it as a CLI arg in `main.py:parse_args()` and wire it into the `DistilConfig(...)` constructor, then add the variable to `hpo_run.sh`.
 
 ---
 
