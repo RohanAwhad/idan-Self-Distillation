@@ -19,15 +19,20 @@ The single most important finding from prior runs: **longer training degrades ac
 | Checkpoint | Avg Accuracy | LR | Notes |
 |---|---|---|---|
 | qwen3-8b-base (baseline) | **84.67%** | - | No fine-tuning |
-| sdft_sdg_hub_v3/step_113 | **85.80%** | unknown | Current best, early step |
-| sdft_idan_test_run/checkpoint-100 | 84.90% +/- 1.54% | 5e-6 | Early stop ~1 epoch |
-| sdft_idan_run_1/checkpoint-100 | 84.90% +/- 1.01% | 2e-5 | Early stop ~1 epoch, same acc as LR=5e-6 |
-| sdft_idan_test_run/checkpoint-224 | 84.34% | 5e-6 | 2 epochs, full training |
-| sdft_idan_run_1/checkpoint-224 | 84.34% | 2e-5 | 2 epochs, full training |
-| sdft_asynth_v3/step_104 | 84.00% | unknown | Early step OK |
-| sdft_sdg_hub_v3_run_6/step_90 | 83.89% | unknown | |
-| sdft_sdg_hub_v3_run_6/step_80 | 81.99% | unknown | |
-| sdft_sdg_hub_v3/step_1120 | 81.77% | unknown | Overfit (late step) |
+| sdft_sdg_hub_v3/step_113 | **85.80%** | unknown | Current best, sdg_hub dataset |
+| sdft_idan_test_run/checkpoint-100 | 84.90% +/- 1.54% | 5e-6 | revKL, student gen, ~1 epoch |
+| sdft_idan_run_1/checkpoint-100 | 84.90% +/- 1.01% | 2e-5 | revKL, student gen, ~1 epoch |
+| sdft_idan_hpo_2/checkpoint-50 | 84.23% +/- 1.46% | 5e-6 | **fwdKL**, student gen |
+| sdft_idan_test_run/checkpoint-224 | 84.34% | 5e-6 | revKL, 2 epochs overfit |
+| sdft_idan_run_1/checkpoint-224 | 84.34% | 2e-5 | revKL, 2 epochs overfit |
+| sdft_idan_hpo_2/checkpoint-100 | 83.55% +/- 1.21% | 5e-6 | fwdKL, student gen, overfit |
+| sdft_idan_hpo_4/checkpoint-100 | 82.89% +/- 2.93% | 5e-6 | fwdKL, **teacher gen** |
+| sdft_idan_hpo_3/checkpoint-50 | 82.77% +/- 0.52% | 5e-6 | INVALID (ref_mixup=1.01 bug) |
+| sdft_asynth_v3/step_104 | 84.00% | unknown | asynth dataset |
+| sdft_sdg_hub_v3_run_6/step_90 | 83.89% | unknown | sdg_hub dataset |
+| sdft_sdg_hub_v3/step_1120 | 81.77% | unknown | Overfit |
+| sdft_idan_hpo_4/checkpoint-50 | 80.65% +/- 0.70% | 5e-6 | fwdKL, teacher gen, too early |
+| sdft_idan_hpo_3/checkpoint-100 | 80.31% +/- 2.05% | 5e-6 | INVALID (ref_mixup=1.01 bug) |
 | sdft_asynth_v3/step_1030 | 77.07% | unknown | Severely overfit |
 
 ### Loss Curves from Prior Runs
@@ -216,11 +221,11 @@ To use these, add CLI arg in `main.py:parse_args()`, wire into `DistilConfig(...
 
 3. **The 84.90% ceiling**: With default reverse KL (alpha=1.0) and standard SDFT on tooluse dataset, ~84.9% appears to be the ceiling regardless of LR. Breaking through requires changing the training objective or generation strategy.
 
-4. **Teacher gen + reverse KL = DIVERGES**: HPO 3 showed exploding loss (0.96→3.89) and grad_norm=23 by step 42. Reverse KL with the teacher's information advantage (golden response in prompt) creates catastrophically unstable gradients. **DO NOT combine `--generate_from_teacher` with `alpha=1.0`.**
+4. **Teacher gen HURTS regardless of KL direction**: Teacher gen best = 82.89% (HPO 4, fwdKL), well below baseline 84.67%. The information gap between teacher_prompt (has golden response) and student prompt (plain question) is too large. **`--generate_from_teacher` is a dead end.**
 
-5. **Teacher gen + forward KL = STABLE**: HPO 4 showed stable training (loss=0.42, grad_norm=1.5) at step 38. Forward KL handles the information gap gracefully. This is the promising configuration.
+5. **Forward KL is worse than reverse KL for factual QA**: HPO 2 (fwdKL, student gen) = 84.23% vs prior (revKL, student gen) = 84.90%. Forward KL's mean-seeking property spreads probability mass too thin for precise factual answers. Reverse KL's mode-seeking gives sharper, more accurate responses.
 
-6. **Forward KL always gives lower training loss**: Both with student gen (HPO 2: 0.17) and teacher gen (HPO 4: 0.42), forward KL produces lower loss than reverse KL. For factual QA where we need coverage, this is likely beneficial.
+6. **Default config is near-optimal**: Reverse KL + student gen + early stopping at ~100 steps gives 84.90%, which appears to be the tooluse dataset ceiling for this SDFT approach. The gap to 85.80% (sdg_hub dataset) may be a dataset quality issue, not hyperparameter.
 
 ### Remaining hypotheses
 
