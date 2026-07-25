@@ -6,7 +6,7 @@
 #
 # Usage: bash hpo_run.sh
 
-set -euo pipefail
+set -uo pipefail
 
 # ============================================================
 # HYPERPARAMETERS — modify these between runs
@@ -35,7 +35,21 @@ EVAL_DIR="/home/rohan/1_Projects/maas-knowledge-eval"
 TRAIN_DIR="/home/rohan/1_Projects/idan_sdft"
 TMUX_TARGET="idans_sdft:0.0"
 TRAIN_GPUS="4,5,6,7"
-INFER_GPU="0"
+INFER_GPU="${TRAIN_GPUS%%,*}"
+SCRIPT_STATUS="UNKNOWN"
+
+# Always notify via tmux on exit (success, error, or signal)
+notify() {
+  local elapsed=$(( $(date +%s) - START_TIME ))
+  local msg="HPO ${RUN_NAME} | status=${SCRIPT_STATUS} | time=${elapsed}s"
+  if [ -n "${RESULT_MSG:-}" ]; then
+    msg="${RESULT_MSG}"
+  fi
+  echo "[$(date '+%Y-%m-%d %H:%M')] ${msg}" >> "${RESULTS_LOG}"
+  tmux send-keys -t "${TMUX_TARGET}" "# ${msg}" Enter
+}
+START_TIME=$(date +%s)
+trap notify EXIT
 
 # ============================================================
 # TRAINING
@@ -52,11 +66,10 @@ echo "log: ${TRAIN_LOG}"
 echo "==========================================="
 echo ""
 
-START_TIME=$(date +%s)
-
 cd "${TRAIN_DIR}"
 
 # Run training with timeout
+SCRIPT_STATUS="TRAINING"
 timeout ${TIMEOUT} \
   env CUDA_VISIBLE_DEVICES=${TRAIN_GPUS} \
       WANDB_PROJECT="amortize-maas" \
@@ -102,9 +115,7 @@ LAST_CKPT=$(ls -d "${OUTPUT_DIR}"/checkpoint-* 2>/dev/null | sort -t- -k2 -n | t
 
 if [ -z "${LAST_CKPT}" ]; then
   echo "ERROR: No checkpoint found in ${OUTPUT_DIR}"
-  MSG="# HPO ${RUN_NAME}: FAILED - no checkpoint saved after ${TRAIN_STEPS} steps"
-  echo "${MSG}" >> "${RESULTS_LOG}"
-  tmux send-keys -t "${TMUX_TARGET}" "${MSG}" Enter
+  SCRIPT_STATUS="FAILED_NO_CKPT (${TRAIN_STEPS} steps)"
   exit 1
 fi
 
@@ -119,11 +130,12 @@ echo ""
 echo "=== Running Inference on GPU ${INFER_GPU} ==="
 echo "just infer ${INFER_GPU} ${CKPT_NAME}"
 
+SCRIPT_STATUS="INFERENCE"
 cd "${EVAL_DIR}"
-just infer "${INFER_GPU}" "${CKPT_NAME}"
-
-INFER_EXIT=$?
-echo "Inference exit code: ${INFER_EXIT}"
+if ! just infer "${INFER_GPU}" "${CKPT_NAME}"; then
+  SCRIPT_STATUS="FAILED_INFERENCE"
+  exit 1
+fi
 
 # ============================================================
 # EVALUATION (Claude judge)
@@ -132,10 +144,11 @@ echo ""
 echo "=== Running Evaluation (Claude judge) ==="
 echo "just eval-claude ${CKPT_NAME}"
 
-just eval-claude "${CKPT_NAME}"
-
-EVAL_EXIT=$?
-echo "Eval exit code: ${EVAL_EXIT}"
+SCRIPT_STATUS="EVALUATION"
+if ! just eval-claude "${CKPT_NAME}"; then
+  SCRIPT_STATUS="FAILED_EVAL"
+  exit 1
+fi
 
 # ============================================================
 # PARSE RESULTS
@@ -144,7 +157,6 @@ echo ""
 echo "=== Parsing Results ==="
 
 EVAL_RESULTS_DIR="${EVAL_DIR}/eval_results_anthropic_sonnet/v3_sdft/${CKPT_NAME}"
-RUN_PREFIX="${CKPT_NAME//\//_}"
 
 ACCURACIES=""
 for i in 1 2 3; do
@@ -169,22 +181,13 @@ else:
     print('N/A')
 ")
 
-TOTAL_TIME=$(( $(date +%s) - START_TIME ))
-
 # ============================================================
-# REPORT
+# REPORT (trap handles tmux notify + log append)
 # ============================================================
-RESULT_MSG="HPO ${RUN_NAME} | ckpt=${CKPT_BASENAME} steps=${TRAIN_STEPS} | LR=${LEARNING_RATE} ep=${NUM_EPOCHS} batch=${NUM_PROMPTS_PER_BATCH}x${PER_DEVICE_BATCH_SIZE} alpha=${REF_MODEL_MIXUP_ALPHA} | acc=${AVG_ACC} | baseline=84.7% | time=${TOTAL_TIME}s"
+SCRIPT_STATUS="DONE"
+RESULT_MSG="HPO ${RUN_NAME} | ckpt=${CKPT_BASENAME} steps=${TRAIN_STEPS} | LR=${LEARNING_RATE} ep=${NUM_EPOCHS} batch=${NUM_PROMPTS_PER_BATCH}x${PER_DEVICE_BATCH_SIZE} alpha=${REF_MODEL_MIXUP_ALPHA} | acc=${AVG_ACC} | baseline=84.7%"
 
 echo ""
 echo "==========================================="
 echo "RESULT: ${RESULT_MSG}"
 echo "==========================================="
-
-# Append to persistent results log
-echo "[$(date '+%Y-%m-%d %H:%M')] ${RESULT_MSG}" >> "${RESULTS_LOG}"
-
-# Send back to opencode tmux pane
-tmux send-keys -t "${TMUX_TARGET}" "# ${RESULT_MSG}" Enter
-
-echo "Done. Results logged to ${RESULTS_LOG}"
