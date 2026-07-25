@@ -20,6 +20,8 @@ The single most important finding from prior runs: **longer training degrades ac
 |---|---|---|---|
 | qwen3-8b-base (baseline) | **84.67%** | - | No fine-tuning |
 | sdft_sdg_hub_v3/step_113 | **85.80%** | unknown | Current best, early step |
+| sdft_idan_test_run/checkpoint-100 | 84.90% +/- 1.54% | 5e-6 | Early stop ~1 epoch |
+| sdft_idan_run_1/checkpoint-100 | 84.90% +/- 1.01% | 2e-5 | Early stop ~1 epoch, same acc as LR=5e-6 |
 | sdft_idan_test_run/checkpoint-224 | 84.34% | 5e-6 | 2 epochs, full training |
 | sdft_idan_run_1/checkpoint-224 | 84.34% | 2e-5 | 2 epochs, full training |
 | sdft_asynth_v3/step_104 | 84.00% | unknown | Early step OK |
@@ -195,17 +197,25 @@ To use these, add CLI arg in `main.py:parse_args()`, wire into `DistilConfig(...
 
 ---
 
-## Key Intuitions for HPO
+## Key Findings & Intuitions
 
-1. **Early stopping matters most**: The best checkpoint so far (85.80%) was at step 113 (~1 epoch). Overfitting is the primary failure mode. With save_steps=50, you get checkpoints at 50, 100, 150... — evaluate multiple if needed.
+### Confirmed findings (from experiments)
 
-2. **Learning rate**: Prior runs show LR=5e-6 gets lower loss than LR=2e-5, but both plateau at ~84.3% eval accuracy. The sdg_hub runs that hit 85.8% used unknown LR — exploring the 1e-6 to 1e-5 range is likely productive.
+1. **LR doesn't matter much**: Both LR=5e-6 and LR=2e-5 give exactly 84.90% at checkpoint-100 and 84.34% at checkpoint-224. LR tuning alone won't bridge the gap to 85.80%. The training signal itself needs to change.
 
-3. **KL direction (alpha)**: All prior runs used alpha=1.0 (reverse KL). Forward KL (alpha=0.0) or JSD (alpha=0.5) might behave differently — reverse KL is mode-seeking, forward KL is mean-seeking.
+2. **Early stopping helps modestly**: checkpoint-100 (84.90%) vs checkpoint-224 (84.34%) = +0.56%. Confirms overfitting at later steps but the gain is insufficient alone.
 
-4. **Reference model tracking**: Currently ref_model_mixup_alpha=0.01 with sync every 1 step. This means the reference model tracks the student very closely. A higher alpha (e.g., 0.05-0.1) might provide stronger regularization against overfitting.
+3. **The 84.90% ceiling**: With default reverse KL (alpha=1.0) and standard SDFT on tooluse dataset, ~84.9% appears to be the ceiling regardless of LR. Breaking through requires changing the training objective or generation strategy.
 
-5. **Effective batch size**: Currently 16 * 2 = 32. Larger batch (e.g., 32 * 2 = 64) could stabilize training but reduces number of steps per epoch.
+### Hypotheses to test
+
+4. **KL direction (alpha)**: All prior runs used alpha=1.0 (reverse KL = mode-seeking). Forward KL (alpha=0.0 = mean-seeking) forces the student to cover all teacher modes, which may be better for factual QA coverage.
+
+5. **Generate from teacher**: With `--generate_from_teacher`, vLLM uses teacher weights for generation. Since teacher and student start identical, this mainly affects training dynamics as the student diverges — teacher-generated completions stay closer to base model quality.
+
+6. **Reference model tracking**: ref_model_mixup_alpha=0.01 with sync every 1 step means the ref model tracks student closely. Higher alpha (0.05-0.1) = stronger regularization against overfitting.
+
+7. **Effective batch size**: Currently 16 * 2 = 32. Larger batch (e.g., 32 * 2 = 64) could stabilize training but reduces steps per epoch.
 
 ---
 
