@@ -11,7 +11,7 @@ set -uo pipefail
 # ============================================================
 # HYPERPARAMETERS — modify these between runs
 # ============================================================
-RUN_NAME="sdft_idan_hpo_5"
+RUN_NAME="sdft_idan_hpo_6"
 LEARNING_RATE=5e-6
 NUM_EPOCHS=3
 NUM_PROMPTS_PER_BATCH=16
@@ -23,13 +23,13 @@ DATASET="tooluse"
 ENABLE_THINKING=""   # set to "--enable_thinking" to enable
 
 # Additional tunable hyperparameters (defaults match DistilConfig)
-ALPHA=1.0              # KL direction: 0.0=forward, 0.5=JSD, 1.0=reverse
+ALPHA=0.5              # KL direction: 0.0=forward, 0.5=JSD, 1.0=reverse
 TEMPERATURE=1.0        # Generation sampling temperature
 WARMUP_RATIO=0.1       # LR warmup fraction
 LR_SCHEDULER="cosine"  # cosine, linear, constant
 MAX_GRAD_NORM=1.0      # Gradient clipping norm
 LOSS_TYPE="dapo"       # grpo, dapo, dr_grpo, bnpo
-GENERATE_FROM_TEACHER="--generate_from_teacher"  # online SFT: teacher generates from teacher_prompt
+GENERATE_FROM_TEACHER=""  # set to "--generate_from_teacher" for online SFT mode
 
 # ============================================================
 # FIXED CONFIG — generally don't change these
@@ -43,7 +43,7 @@ RESULTS_LOG="/tmp/sdft_hpo_results.log"
 EVAL_DIR="/home/rohan/1_Projects/maas-knowledge-eval"
 TRAIN_DIR="/home/rohan/1_Projects/idan_sdft"
 TMUX_TARGET="idans_sdft:0.0"
-TRAIN_GPUS="4,5,6,7"
+TRAIN_GPUS="0,1,2,3"
 INFER_GPU="${TRAIN_GPUS%%,*}"
 SCRIPT_STATUS="UNKNOWN"
 
