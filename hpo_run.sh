@@ -43,7 +43,7 @@ RESULTS_LOG="/tmp/sdft_hpo_results.log"
 EVAL_DIR="/home/rohan/1_Projects/maas-knowledge-eval"
 TRAIN_DIR="/home/rohan/1_Projects/idan_sdft"
 TMUX_TARGET="idans_sdft:0.0"
-TRAIN_GPUS="0,1,2,3"
+TRAIN_GPUS="4,5,6,7"
 INFER_GPU="${TRAIN_GPUS%%,*}"
 SCRIPT_STATUS="UNKNOWN"
 
@@ -112,14 +112,14 @@ SCRIPT_STATUS="TRAINING"
       ${GENERATE_FROM_TEACHER}
 ) 2>&1 | tee "${TRAIN_LOG}" || true
 
-TRAIN_EXIT=${PIPESTATUS[0]:-$?}
+TRAIN_EXIT=$?
 END_TIME=$(date +%s)
 TRAIN_ELAPSED=$(( END_TIME - START_TIME ))
 
 echo ""
 echo "Training finished in ${TRAIN_ELAPSED}s (exit code: ${TRAIN_EXIT})"
-if [ "${TRAIN_EXIT}" -eq 124 ]; then
-  echo "  (timed out after ${TIMEOUT}s)"
+if [ "${TRAIN_ELAPSED}" -ge "${TIMEOUT}" ]; then
+  echo "  (likely timed out after ${TIMEOUT}s)"
 fi
 
 # Count training steps from log (-a treats binary files as text due to progress bar chars)
