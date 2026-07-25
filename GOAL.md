@@ -216,15 +216,17 @@ To use these, add CLI arg in `main.py:parse_args()`, wire into `DistilConfig(...
 
 3. **The 84.90% ceiling**: With default reverse KL (alpha=1.0) and standard SDFT on tooluse dataset, ~84.9% appears to be the ceiling regardless of LR. Breaking through requires changing the training objective or generation strategy.
 
-### Hypotheses to test
+4. **Teacher gen + reverse KL = DIVERGES**: HPO 3 showed exploding loss (0.96→3.89) and grad_norm=23 by step 42. Reverse KL with the teacher's information advantage (golden response in prompt) creates catastrophically unstable gradients. **DO NOT combine `--generate_from_teacher` with `alpha=1.0`.**
 
-4. **KL direction (alpha)**: All prior runs used alpha=1.0 (reverse KL = mode-seeking). Forward KL (alpha=0.0 = mean-seeking) forces the student to cover all teacher modes, which may be better for factual QA coverage.
+5. **Teacher gen + forward KL = STABLE**: HPO 4 showed stable training (loss=0.42, grad_norm=1.5) at step 38. Forward KL handles the information gap gracefully. This is the promising configuration.
 
-5. **Generate from teacher**: With `--generate_from_teacher`, vLLM uses teacher weights for generation. Since teacher and student start identical, this mainly affects training dynamics as the student diverges — teacher-generated completions stay closer to base model quality.
+6. **Forward KL always gives lower training loss**: Both with student gen (HPO 2: 0.17) and teacher gen (HPO 4: 0.42), forward KL produces lower loss than reverse KL. For factual QA where we need coverage, this is likely beneficial.
 
-6. **Reference model tracking**: ref_model_mixup_alpha=0.01 with sync every 1 step means the ref model tracks student closely. Higher alpha (0.05-0.1) = stronger regularization against overfitting.
+### Remaining hypotheses
 
-7. **Effective batch size**: Currently 16 * 2 = 32. Larger batch (e.g., 32 * 2 = 64) could stabilize training but reduces steps per epoch.
+7. **Reference model tracking**: ref_model_mixup_alpha=0.01 with sync every 1 step means the ref model tracks student closely. Higher alpha (0.05-0.1) = stronger regularization against overfitting.
+
+8. **Effective batch size**: Currently 16 * 2 = 32. Larger batch (e.g., 32 * 2 = 64) could stabilize training but reduces steps per epoch.
 
 ---
 
