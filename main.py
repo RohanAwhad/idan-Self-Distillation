@@ -22,6 +22,7 @@ def parse_args():
     parser.add_argument("--enable_thinking", action="store_true", default=False, help="Enable thinking mode in chat template (e.g. for Qwen3)")
     parser.add_argument("--report_to", type=str, default="wandb", help="Reporting integration (wandb, none)")
     parser.add_argument("--save_strategy", type=str, default="steps", help="Save strategy (steps, no)")
+    parser.add_argument("--save_steps", type=int, default=100, help="Save checkpoint every N steps")
     return parser.parse_args()
 
 def load_tooluse_dataset(seed=42) -> Dataset:
@@ -126,7 +127,7 @@ if __name__ == "__main__":
         num_train_epochs = args.num_train_epochs,
         num_iterations = 1,
         num_generations = 1,
-        save_steps = 100,
+        save_steps = args.save_steps,
         save_strategy = args.save_strategy,
         max_grad_norm = 1,
         report_to = args.report_to,
