@@ -58,7 +58,7 @@ Lower LR (5e-6) achieves lower loss but same eval accuracy as higher LR (2e-5).
   - GPU 4 (CUDA 0): vLLM colocated generation
   - GPU 5 (CUDA 1): Teacher model
   - GPU 6,7 (CUDA 2,3): Student model (device_map="auto")
-- **Inference** (after training): GPU 0
+- **Inference** (after training): GPU 4 (first training GPU, freed after training completes)
 
 ### Hardware
 - 8x NVIDIA H100 80GB HBM3
@@ -106,7 +106,7 @@ Location: `/home/rohan/1_Projects/idan_sdft/hpo_run.sh`
 1. Set hyperparameters (variables at top of script)
 2. Train with `timeout 7200` (2 hours hard cap)
 3. Find last checkpoint-* directory in output_dir
-4. Run inference on GPU 0 (just infer)
+4. Run inference on GPU 4 (just infer, training GPUs are freed by now)
 5. Run eval-claude
 6. Parse accuracy from 3 summary JSONs, compute mean +/- std
 7. Send result summary to tmux idans_sdft:0.0
