@@ -11,8 +11,8 @@ set -uo pipefail
 # ============================================================
 # HYPERPARAMETERS — modify these between runs
 # ============================================================
-RUN_NAME="sdft_idan_hpo_6"
-LEARNING_RATE=5e-6
+RUN_NAME="sdft_idan_hpo_7"
+LEARNING_RATE=1e-5
 NUM_EPOCHS=3
 NUM_PROMPTS_PER_BATCH=16
 PER_DEVICE_BATCH_SIZE=2
@@ -23,7 +23,7 @@ DATASET="tooluse"
 ENABLE_THINKING=""   # set to "--enable_thinking" to enable
 
 # Additional tunable hyperparameters (defaults match DistilConfig)
-ALPHA=0.5              # KL direction: 0.0=forward, 0.5=JSD, 1.0=reverse
+ALPHA=1.0              # KL direction: 0.0=forward, 0.5=JSD, 1.0=reverse
 TEMPERATURE=1.0        # Generation sampling temperature
 WARMUP_RATIO=0.1       # LR warmup fraction
 LR_SCHEDULER="cosine"  # cosine, linear, constant
