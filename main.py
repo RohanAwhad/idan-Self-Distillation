@@ -23,6 +23,14 @@ def parse_args():
     parser.add_argument("--report_to", type=str, default="wandb", help="Reporting integration (wandb, none)")
     parser.add_argument("--save_strategy", type=str, default="steps", help="Save strategy (steps, no)")
     parser.add_argument("--save_steps", type=int, default=100, help="Save checkpoint every N steps")
+    # Additional tunable hyperparameters (defaults match DistilConfig)
+    parser.add_argument("--alpha", type=float, default=1.0, help="KL direction: 0.0=forward, 0.5=JSD, 1.0=reverse")
+    parser.add_argument("--temperature", type=float, default=1.0, help="Generation sampling temperature")
+    parser.add_argument("--warmup_ratio", type=float, default=0.1, help="LR warmup fraction")
+    parser.add_argument("--lr_scheduler_type", type=str, default="cosine", help="LR schedule: cosine, linear, constant")
+    parser.add_argument("--max_grad_norm", type=float, default=1.0, help="Gradient clipping norm")
+    parser.add_argument("--loss_type", type=str, default="dapo", help="Loss type: grpo, dapo, dr_grpo, bnpo")
+    parser.add_argument("--generate_from_teacher", action="store_true", default=False, help="Use teacher model for generation (online SFT mode)")
     return parser.parse_args()
 
 def load_tooluse_dataset(seed=42) -> Dataset:
@@ -114,8 +122,8 @@ if __name__ == "__main__":
         vllm_gpu_memory_utilization=0.5,
         vllm_enable_sleep_mode=False, 
         learning_rate = args.learning_rate,
-        warmup_ratio = 0.1,
-        lr_scheduler_type = "cosine",
+        warmup_ratio = args.warmup_ratio,
+        lr_scheduler_type = args.lr_scheduler_type,
         logging_steps = 1,
         bf16 = True,
         fp16 = False,
@@ -129,7 +137,7 @@ if __name__ == "__main__":
         num_generations = 1,
         save_steps = args.save_steps,
         save_strategy = args.save_strategy,
-        max_grad_norm = 1,
+        max_grad_norm = args.max_grad_norm,
         report_to = args.report_to,
         output_dir = args.output_dir,
         log_completions = False, # True for debugging
@@ -139,6 +147,10 @@ if __name__ == "__main__":
         vllm_importance_sampling_correction = True,
         num_loss_tokens_to_skip = 3,
         enable_thinking = args.enable_thinking,
+        alpha = args.alpha,
+        temperature = args.temperature,
+        loss_type = args.loss_type,
+        generate_from_teacher = args.generate_from_teacher,
     )
     trainer = DistilTrainer(
         model=model,

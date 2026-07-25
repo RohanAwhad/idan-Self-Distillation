@@ -1,7 +1,7 @@
 #!/bin/bash
 # HPO Run Script for SDFT (Self-Distillation Fine-Tuning)
 # =======================================================
-# Trains Qwen3-8B with a 2-hour timeout, then evaluates the last checkpoint.
+# Trains Qwen3-8B with a 2-hour timeout, then evaluates ALL checkpoints.
 # Sends results back to the opencode tmux pane when done.
 #
 # Usage: bash hpo_run.sh
@@ -21,6 +21,15 @@ SAVE_STEPS=50
 SEED=42
 DATASET="tooluse"
 ENABLE_THINKING=""   # set to "--enable_thinking" to enable
+
+# Additional tunable hyperparameters (defaults match DistilConfig)
+ALPHA=1.0              # KL direction: 0.0=forward, 0.5=JSD, 1.0=reverse
+TEMPERATURE=1.0        # Generation sampling temperature
+WARMUP_RATIO=0.1       # LR warmup fraction
+LR_SCHEDULER="cosine"  # cosine, linear, constant
+MAX_GRAD_NORM=1.0      # Gradient clipping norm
+LOSS_TYPE="dapo"       # grpo, dapo, dr_grpo, bnpo
+GENERATE_FROM_TEACHER=""  # set to "--generate_from_teacher" for online SFT mode
 
 # ============================================================
 # FIXED CONFIG — generally don't change these
@@ -58,8 +67,11 @@ echo "==========================================="
 echo "HPO Run: ${RUN_NAME}"
 echo "==========================================="
 echo "LR=${LEARNING_RATE}  epochs=${NUM_EPOCHS}  batch=${NUM_PROMPTS_PER_BATCH}x${PER_DEVICE_BATCH_SIZE}"
-echo "ref_alpha=${REF_MODEL_MIXUP_ALPHA}  save_steps=${SAVE_STEPS}  seed=${SEED}"
-echo "thinking=${ENABLE_THINKING:-off}  dataset=${DATASET}"
+echo "ref_mixup=${REF_MODEL_MIXUP_ALPHA}  alpha=${ALPHA}  temp=${TEMPERATURE}"
+echo "warmup=${WARMUP_RATIO}  scheduler=${LR_SCHEDULER}  grad_norm=${MAX_GRAD_NORM}"
+echo "loss=${LOSS_TYPE}  save_steps=${SAVE_STEPS}  seed=${SEED}"
+echo "thinking=${ENABLE_THINKING:-off}  teacher_gen=${GENERATE_FROM_TEACHER:-off}"
+echo "dataset=${DATASET}"
 echo "output: ${OUTPUT_DIR}"
 echo "timeout: ${TIMEOUT}s ($(( TIMEOUT / 60 ))m)"
 echo "log: ${TRAIN_LOG}"
@@ -88,7 +100,14 @@ timeout ${TIMEOUT} \
     --save_steps ${SAVE_STEPS} \
     --report_to wandb \
     --seed ${SEED} \
+    --alpha ${ALPHA} \
+    --temperature ${TEMPERATURE} \
+    --warmup_ratio ${WARMUP_RATIO} \
+    --lr_scheduler_type ${LR_SCHEDULER} \
+    --max_grad_norm ${MAX_GRAD_NORM} \
+    --loss_type ${LOSS_TYPE} \
     ${ENABLE_THINKING} \
+    ${GENERATE_FROM_TEACHER} \
   2>&1 | tee "${TRAIN_LOG}" || true
 
 TRAIN_EXIT=${PIPESTATUS[0]:-$?}
@@ -106,86 +125,101 @@ TRAIN_STEPS=$(grep -c "'loss':" "${TRAIN_LOG}" 2>/dev/null || echo "0")
 echo "Training steps completed: ${TRAIN_STEPS}"
 
 # ============================================================
-# FIND LAST CHECKPOINT
+# FIND ALL CHECKPOINTS
 # ============================================================
 echo ""
-echo "=== Finding last checkpoint ==="
+echo "=== Finding checkpoints ==="
 
-LAST_CKPT=$(ls -d "${OUTPUT_DIR}"/checkpoint-* 2>/dev/null | sort -t- -k2 -n | tail -1)
+ALL_CKPTS=$(ls -d "${OUTPUT_DIR}"/checkpoint-* 2>/dev/null | sort -t- -k2 -n)
 
-if [ -z "${LAST_CKPT}" ]; then
+if [ -z "${ALL_CKPTS}" ]; then
   echo "ERROR: No checkpoint found in ${OUTPUT_DIR}"
   SCRIPT_STATUS="FAILED_NO_CKPT (${TRAIN_STEPS} steps)"
   exit 1
 fi
 
-CKPT_BASENAME=$(basename "${LAST_CKPT}")
-CKPT_NAME="${RUN_NAME}/${CKPT_BASENAME}"
-echo "Last checkpoint: ${CKPT_NAME} (at ${LAST_CKPT})"
+CKPT_COUNT=$(echo "${ALL_CKPTS}" | wc -l)
+echo "Found ${CKPT_COUNT} checkpoint(s):"
+echo "${ALL_CKPTS}" | while read -r p; do echo "  $(basename "$p")"; done
 
 # ============================================================
-# INFERENCE
+# EVALUATE ALL CHECKPOINTS
 # ============================================================
-echo ""
-echo "=== Running Inference on GPU ${INFER_GPU} ==="
-echo "just infer ${INFER_GPU} ${CKPT_NAME}"
-
-SCRIPT_STATUS="INFERENCE"
 cd "${EVAL_DIR}"
-if ! just infer "${INFER_GPU}" "${CKPT_NAME}"; then
-  SCRIPT_STATUS="FAILED_INFERENCE"
-  exit 1
-fi
 
-# ============================================================
-# EVALUATION (Claude judge)
-# ============================================================
-echo ""
-echo "=== Running Evaluation (Claude judge) ==="
-echo "just eval-claude ${CKPT_NAME}"
+BEST_AVG="0"
+BEST_CKPT=""
+CKPT_SUMMARIES=""
 
-SCRIPT_STATUS="EVALUATION"
-if ! just eval-claude "${CKPT_NAME}"; then
-  SCRIPT_STATUS="FAILED_EVAL"
-  exit 1
-fi
+for CKPT_PATH in ${ALL_CKPTS}; do
+  CKPT_BASENAME=$(basename "${CKPT_PATH}")
+  CKPT_NAME="${RUN_NAME}/${CKPT_BASENAME}"
 
-# ============================================================
-# PARSE RESULTS
-# ============================================================
-echo ""
-echo "=== Parsing Results ==="
+  echo ""
+  echo "--- Evaluating: ${CKPT_NAME} ---"
 
-EVAL_RESULTS_DIR="${EVAL_DIR}/eval_results_anthropic_sonnet/v3_sdft/${CKPT_NAME}"
-
-ACCURACIES=""
-for i in 1 2 3; do
-  SUMMARY_FILE=$(ls "${EVAL_RESULTS_DIR}"/rag_v2_eval_summary_*"-${i}.json" 2>/dev/null | head -1)
-  if [ -f "${SUMMARY_FILE}" ]; then
-    ACC=$(python3 -c "import json; d=json.load(open('${SUMMARY_FILE}')); print(d['accuracy'])")
-    ACCURACIES="${ACCURACIES} ${ACC}"
-    echo "  Run ${i}: accuracy=${ACC}"
-  else
-    echo "  Run ${i}: summary file not found"
+  # Inference
+  SCRIPT_STATUS="INFERENCE (${CKPT_BASENAME})"
+  if ! just infer "${INFER_GPU}" "${CKPT_NAME}"; then
+    echo "WARNING: Inference failed for ${CKPT_NAME}, skipping"
+    CKPT_SUMMARIES="${CKPT_SUMMARIES} | ${CKPT_BASENAME}=INFER_FAIL"
+    continue
   fi
-done
 
-AVG_ACC=$(python3 -c "
+  # Evaluation
+  SCRIPT_STATUS="EVALUATION (${CKPT_BASENAME})"
+  if ! just eval-claude "${CKPT_NAME}"; then
+    echo "WARNING: Eval failed for ${CKPT_NAME}, skipping"
+    CKPT_SUMMARIES="${CKPT_SUMMARIES} | ${CKPT_BASENAME}=EVAL_FAIL"
+    continue
+  fi
+
+  # Parse results for this checkpoint
+  EVAL_RESULTS_DIR="${EVAL_DIR}/eval_results_anthropic_sonnet/v3_sdft/${CKPT_NAME}"
+  ACCURACIES=""
+  for i in 1 2 3; do
+    SUMMARY_FILE=$(ls "${EVAL_RESULTS_DIR}"/rag_v2_eval_summary_*"-${i}.json" 2>/dev/null | head -1)
+    if [ -f "${SUMMARY_FILE}" ]; then
+      ACC=$(python3 -c "import json; d=json.load(open('${SUMMARY_FILE}')); print(d['accuracy'])")
+      ACCURACIES="${ACCURACIES} ${ACC}"
+      echo "  Run ${i}: accuracy=${ACC}"
+    else
+      echo "  Run ${i}: summary file not found"
+    fi
+  done
+
+  CKPT_AVG=$(python3 -c "
 accs = [float(x) for x in '''${ACCURACIES}'''.split()]
 if accs:
     import statistics
     avg = statistics.mean(accs)
     std = statistics.stdev(accs) if len(accs) > 1 else 0
-    print(f'{avg:.4f} +/- {std:.4f} ({len(accs)} runs)')
+    print(f'{avg*100:.2f}%+/-{std*100:.2f}%')
 else:
     print('N/A')
 ")
+  echo "  => ${CKPT_BASENAME}: ${CKPT_AVG}"
+  CKPT_SUMMARIES="${CKPT_SUMMARIES} | ${CKPT_BASENAME}=${CKPT_AVG}"
+
+  # Track best
+  CURR_AVG=$(python3 -c "
+accs = [float(x) for x in '''${ACCURACIES}'''.split()]
+print(f'{sum(accs)/len(accs):.6f}' if accs else '0')
+")
+  if python3 -c "exit(0 if float('${CURR_AVG}') > float('${BEST_AVG}') else 1)"; then
+    BEST_AVG="${CURR_AVG}"
+    BEST_CKPT="${CKPT_BASENAME}"
+  fi
+done
+
+# Format best accuracy
+BEST_PCT=$(python3 -c "print(f'{float(\"${BEST_AVG}\")*100:.2f}%')" 2>/dev/null || echo "N/A")
 
 # ============================================================
 # REPORT (trap handles tmux notify + log append)
 # ============================================================
 SCRIPT_STATUS="DONE"
-RESULT_MSG="HPO ${RUN_NAME} | ckpt=${CKPT_BASENAME} steps=${TRAIN_STEPS} | LR=${LEARNING_RATE} ep=${NUM_EPOCHS} batch=${NUM_PROMPTS_PER_BATCH}x${PER_DEVICE_BATCH_SIZE} alpha=${REF_MODEL_MIXUP_ALPHA} | acc=${AVG_ACC} | baseline=84.7%"
+RESULT_MSG="HPO ${RUN_NAME} | steps=${TRAIN_STEPS} | LR=${LEARNING_RATE} ep=${NUM_EPOCHS} batch=${NUM_PROMPTS_PER_BATCH}x${PER_DEVICE_BATCH_SIZE} mixup=${REF_MODEL_MIXUP_ALPHA} alpha=${ALPHA} temp=${TEMPERATURE} warmup=${WARMUP_RATIO} sched=${LR_SCHEDULER} loss=${LOSS_TYPE} | BEST=${BEST_CKPT} ${BEST_PCT}${CKPT_SUMMARIES} | baseline=84.7% target=85.8%"
 
 echo ""
 echo "==========================================="
