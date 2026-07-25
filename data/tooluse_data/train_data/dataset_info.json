@@ -23,17 +23,20 @@
       "_type": "Value"
     },
     "golden_answer": {
-      "feature": {
-        "Action": {
+      "Action": {
+        "feature": {
           "dtype": "string",
           "_type": "Value"
         },
-        "Action_Input": {
+        "_type": "List"
+      },
+      "Action_Input": {
+        "feature": {
           "dtype": "string",
           "_type": "Value"
-        }
-      },
-      "_type": "List"
+        },
+        "_type": "List"
+      }
     },
     "golden_response": {
       "feature": {
