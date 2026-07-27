@@ -26,11 +26,12 @@ def parse_args():
     parser.add_argument("--adam_beta1", type=float, default=0.9, help="Adam beta1")
     parser.add_argument("--adam_beta2", type=float, default=0.999, help="Adam beta2")
     parser.add_argument("--weight_decay", type=float, default=0.0, help="Weight decay")
+    parser.add_argument("--tooluse_data_dir", type=str, default="data/tooluse_data/train_data", help="Data directory for tooluse dataset")
     return parser.parse_args()
 
-def load_tooluse_dataset(seed=42) -> Dataset:
+def load_tooluse_dataset(data_dir='data/tooluse_data/train_data', seed=42) -> Dataset:
     """Load and prepare tooluse dataset with formatted prompts."""
-    train_dir = 'data/tooluse_data/train_data'
+    train_dir = data_dir
     train_dataset = load_from_disk(train_dir) 
 
     def format_example(example):
@@ -103,7 +104,7 @@ if __name__ == "__main__":
     )
     tokenizer = AutoTokenizer.from_pretrained(args.model_name)
     if args.dataset_name == "tooluse":
-        dataset, _ = load_tooluse_dataset(args.seed)
+        dataset, _ = load_tooluse_dataset(data_dir=args.tooluse_data_dir, seed=args.seed)
     elif args.dataset_name == "science":
         dataset, _ = load_science_dataset(args.seed)
     else:
