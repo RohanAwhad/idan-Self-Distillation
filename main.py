@@ -23,6 +23,9 @@ def parse_args():
     parser.add_argument("--report_to", type=str, default="wandb", help="Reporting integration (wandb, none)")
     parser.add_argument("--save_strategy", type=str, default="steps", help="Save strategy (steps, no)")
     parser.add_argument("--save_steps", type=int, default=100, help="Save checkpoint every N steps")
+    parser.add_argument("--adam_beta1", type=float, default=0.9, help="Adam beta1")
+    parser.add_argument("--adam_beta2", type=float, default=0.999, help="Adam beta2")
+    parser.add_argument("--weight_decay", type=float, default=0.0, help="Weight decay")
     return parser.parse_args()
 
 def load_tooluse_dataset(seed=42) -> Dataset:
@@ -139,6 +142,9 @@ if __name__ == "__main__":
         vllm_importance_sampling_correction = True,
         num_loss_tokens_to_skip = 3,
         enable_thinking = args.enable_thinking,
+        adam_beta1 = args.adam_beta1,
+        adam_beta2 = args.adam_beta2,
+        weight_decay = args.weight_decay,
     )
     trainer = DistilTrainer(
         model=model,
