@@ -26,6 +26,7 @@ def parse_args():
     parser.add_argument("--adam_beta1", type=float, default=0.9, help="Adam beta1")
     parser.add_argument("--adam_beta2", type=float, default=0.999, help="Adam beta2")
     parser.add_argument("--weight_decay", type=float, default=0.0, help="Weight decay")
+    parser.add_argument("--temperature", type=float, default=1.0, help="Generation sampling temperature")
     parser.add_argument("--tooluse_data_dir", type=str, default="data/tooluse_data/train_data", help="Data directory for tooluse dataset")
     return parser.parse_args()
 
@@ -143,6 +144,7 @@ if __name__ == "__main__":
         vllm_importance_sampling_correction = True,
         num_loss_tokens_to_skip = 3,
         enable_thinking = args.enable_thinking,
+        temperature = args.temperature,
         adam_beta1 = args.adam_beta1,
         adam_beta2 = args.adam_beta2,
         weight_decay = args.weight_decay,
