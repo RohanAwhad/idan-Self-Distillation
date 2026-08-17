@@ -1,0 +1,51 @@
+{
+  "citation": "",
+  "description": "",
+  "features": {
+    "prompt": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "name": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "description": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "nl_documentation": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "instruction": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "golden_answer": {
+      "Action": {
+        "feature": {
+          "dtype": "null",
+          "_type": "Value"
+        },
+        "_type": "List"
+      },
+      "Action_Input": {
+        "feature": {
+          "dtype": "null",
+          "_type": "Value"
+        },
+        "_type": "List"
+      }
+    },
+    "golden_response": {
+      "feature": {
+        "dtype": "string",
+        "_type": "Value"
+      },
+      "_type": "List"
+    }
+  },
+  "homepage": "",
+  "license": ""
+}
